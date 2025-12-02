@@ -220,11 +220,23 @@ caption = (
 # Start command handler
 @bot.on_message(filters.command(["start"]))
 async def start_command(bot: Client, message: Message):
-    
+    # Debug log the URL before sending
     import logging
-logger = logging.getLogger(__name__)
-logger.info("Sending image URL: %s", random_image_url)
-    await send_photo_via_url_or_upload(bot, message.chat.id, random_image_url, caption=caption, reply_markup=keyboard)
+    logger = logging.getLogger(__name__)
+    try:
+        logger.info("Sending image URL: %s", random_image_url)
+    except Exception:
+        pass
+
+    # Send image using fallback helper
+    await send_photo_via_url_or_upload(
+        bot,
+        message.chat.id,
+        random_image_url,
+        caption=caption,
+        reply_markup=keyboard
+    )
+
     
 # Stop command handler
 @bot.on_message(filters.command("stop"))
