@@ -18,6 +18,7 @@ import random
 import ffmpeg
 import logging 
 import yt_dlp
+from aiohttp import ClientTimeout
 from subprocess import getstatusoutput
 from aiohttp import web
 from core import *
@@ -75,14 +76,15 @@ async def send_photo_via_url_or_upload(bot, chat_id, url, caption=None, reply_ma
         logger.warning("Direct send failed, will fallback. err=%s", e)
 
     tmp_path = None
-    timeout = ClientTimeout(total=20)
+    timeout = aiohttp.ClientTimeout(total=20)   # <-- ✅ FIXED LINE
+
     try:
         async with aiohttp.ClientSession(timeout=timeout) as session:
             async with session.get(url, allow_redirects=True) as resp:
                 logger.info("Downloaded %s -> status %s", url, resp.status)
                 if resp.status != 200:
                     logger.warning("Primary URL returned %s, trying default image", resp.status)
-                    # Try fallback image once
+
                     if url != DEFAULT_IMG:
                         await send_photo_via_url_or_upload(bot, chat_id, DEFAULT_IMG, caption=caption, reply_markup=reply_markup)
                     else:
@@ -94,6 +96,7 @@ async def send_photo_via_url_or_upload(bot, chat_id, url, caption=None, reply_ma
                     logger.warning("Not an image: %s", ctype)
                     await bot.send_message(chat_id, f"URL did not return an image (content-type: {ctype}).")
                     return
+
 
                 # stream write
                 total = 0
