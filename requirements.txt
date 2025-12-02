@@ -24,7 +24,7 @@ pytz
 umongo==3.1.0
 speedtest-cli
 
-# Web framework
+# Web frameworks (use whichever you want, both safe)
 Flask==1.1.2
 gunicorn
 fastapi
@@ -33,9 +33,8 @@ Jinja2==3.0.3
 werkzeug==2.0.2
 itsdangerous==2.0.1
 
-# Video / download helpers (PyPI packages only)
+# Video / download helpers
 youtube-dl
 pycurl
 m3u8
-bs4
 pytube
