@@ -62,50 +62,63 @@ SUDO_USERS = [5840594311]
 # ✅ Multiple AUTH CHANNELS allowed
 AUTH_CHANNELS = [-1002605113558,-1002663510614]  # Add more channel IDs here
 
-# --- helper: send_photo_via_url_or_upload ---
-import aiohttp, os, tempfile
-from aiohttp import ClientTimeout
-from pyrogram.errors import WebpageCurlFailed, WebpageMediaEmpty
+import logging
+logger = logging.getLogger(__name__)
+DEFAULT_IMG = "https://graph.org/file/5ed50675df0faf833efef-e102210eb72c1d5a17.jpg"
 
-async def send_photo_via_url_or_upload(bot, chat_id, url, caption=None, reply_markup=None):
+async def send_photo_via_url_or_upload(bot, chat_id, url, caption=None, reply_markup=None, max_bytes=10_000_000):
+    logger.info("Attempt send image url: %s", url)
     try:
-        # Try Telegram fetch
         await bot.send_photo(chat_id=chat_id, photo=url, caption=caption, reply_markup=reply_markup)
         return
-    except (WebpageCurlFailed, WebpageMediaEmpty):
-        pass
-    except Exception:
-        pass
+    except Exception as e:
+        logger.warning("Direct send failed, will fallback. err=%s", e)
 
-    # Fallback download → upload
     tmp_path = None
     timeout = ClientTimeout(total=20)
     try:
         async with aiohttp.ClientSession(timeout=timeout) as session:
-            async with session.get(url) as resp:
+            async with session.get(url, allow_redirects=True) as resp:
+                logger.info("Downloaded %s -> status %s", url, resp.status)
                 if resp.status != 200:
-                    await bot.send_message(chat_id, f"Image fetch failed (HTTP {resp.status})")
+                    logger.warning("Primary URL returned %s, trying default image", resp.status)
+                    # Try fallback image once
+                    if url != DEFAULT_IMG:
+                        await send_photo_via_url_or_upload(bot, chat_id, DEFAULT_IMG, caption=caption, reply_markup=reply_markup)
+                    else:
+                        await bot.send_message(chat_id, f"Image fetch failed (HTTP {resp.status})")
                     return
 
-                content_type = (resp.headers.get("content-type") or "").lower()
-                if not content_type.startswith("image"):
-                    await bot.send_message(chat_id, f"Not an image (content-type: {content_type})")
+                ctype = (resp.headers.get("content-type") or "").lower()
+                if not ctype.startswith("image"):
+                    logger.warning("Not an image: %s", ctype)
+                    await bot.send_message(chat_id, f"URL did not return an image (content-type: {ctype}).")
                     return
 
-                data = await resp.read()
-                with tempfile.NamedTemporaryFile(delete=False, suffix=".jpg") as f:
-                    f.write(data)
-                    tmp_path = f.name
+                # stream write
+                total = 0
+                with tempfile.NamedTemporaryFile(delete=False, suffix=".jpg") as tf:
+                    tmp_path = tf.name
+                    async for chunk in resp.content.iter_chunked(64*1024):
+                        total += len(chunk)
+                        if total > max_bytes:
+                            tf.close()
+                            os.remove(tmp_path)
+                            await bot.send_message(chat_id, "Image too large to upload.")
+                            return
+                        tf.write(chunk)
 
         await bot.send_photo(chat_id=chat_id, photo=tmp_path, caption=caption, reply_markup=reply_markup)
-
     except Exception as e:
-        await bot.send_message(chat_id, f"Failed: {e}")
-
+        logger.exception("Failed in fallback download: %s", e)
+        await bot.send_message(chat_id, f"Failed to send image: {e}")
     finally:
-        if tmp_path and os.path.exists(tmp_path):
-            os.remove(tmp_path)
-# --- end helper ---
+        try:
+            if tmp_path and os.path.exists(tmp_path):
+                os.remove(tmp_path)
+        except:
+            pass
+
 
 
 # Function to check if a user is authorized
@@ -207,6 +220,10 @@ caption = (
 # Start command handler
 @bot.on_message(filters.command(["start"]))
 async def start_command(bot: Client, message: Message):
+    
+    import logging
+logger = logging.getLogger(__name__)
+logger.info("Sending image URL: %s", random_image_url)
     await send_photo_via_url_or_upload(bot, message.chat.id, random_image_url, caption=caption, reply_markup=keyboard)
     
 # Stop command handler
