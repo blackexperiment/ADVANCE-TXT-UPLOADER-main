@@ -62,6 +62,52 @@ SUDO_USERS = [5840594311]
 # ✅ Multiple AUTH CHANNELS allowed
 AUTH_CHANNELS = [-1002605113558,-1002663510614]  # Add more channel IDs here
 
+# --- helper: send_photo_via_url_or_upload ---
+import aiohttp, os, tempfile
+from aiohttp import ClientTimeout
+from pyrogram.errors import WebpageCurlFailed, WebpageMediaEmpty
+
+async def send_photo_via_url_or_upload(bot, chat_id, url, caption=None, reply_markup=None):
+    try:
+        # Try Telegram fetch
+        await bot.send_photo(chat_id=chat_id, photo=url, caption=caption, reply_markup=reply_markup)
+        return
+    except (WebpageCurlFailed, WebpageMediaEmpty):
+        pass
+    except Exception:
+        pass
+
+    # Fallback download → upload
+    tmp_path = None
+    timeout = ClientTimeout(total=20)
+    try:
+        async with aiohttp.ClientSession(timeout=timeout) as session:
+            async with session.get(url) as resp:
+                if resp.status != 200:
+                    await bot.send_message(chat_id, f"Image fetch failed (HTTP {resp.status})")
+                    return
+
+                content_type = (resp.headers.get("content-type") or "").lower()
+                if not content_type.startswith("image"):
+                    await bot.send_message(chat_id, f"Not an image (content-type: {content_type})")
+                    return
+
+                data = await resp.read()
+                with tempfile.NamedTemporaryFile(delete=False, suffix=".jpg") as f:
+                    f.write(data)
+                    tmp_path = f.name
+
+        await bot.send_photo(chat_id=chat_id, photo=tmp_path, caption=caption, reply_markup=reply_markup)
+
+    except Exception as e:
+        await bot.send_message(chat_id, f"Failed: {e}")
+
+    finally:
+        if tmp_path and os.path.exists(tmp_path):
+            os.remove(tmp_path)
+# --- end helper ---
+
+
 # Function to check if a user is authorized
 def is_authorized(user_id: int) -> bool:
     return (
