@@ -568,12 +568,16 @@ async def upload(bot: Client, m: Message):
     await input6.delete(True)
     await editable.delete()
 
-    #thumb = input6.text
-    #if thumb.startswith("http://") or thumb.startswith("https://"):
-        #getstatusoutput(f"wget '{thumb}' -O 'thumb.jpg'")
-        #thumb = "thumb.jpg"
+    # thumbnail handling
+    thumb = input6.text if input6 and getattr(input6, "text", None) else ""
+    if thumb and (thumb.startswith("http://") or thumb.startswith("https://")):
+        # download the thumb if it's a URL
+        from subprocess import getstatusoutput
+        getstatusoutput(f"wget '{thumb}' -O 'thumb.jpg'")
+        thumb = "thumb.jpg"
     else:
-        thumb == "no"
+        thumb = "no"
+
     failed_count =0
     if len(links) == 1:
         count = 1
